@@ -39,6 +39,7 @@
 #include "fmodprim.hh"
 #include "global.hh"
 #include "instructions.hh"
+#include "internalprim.hh"
 #include "log10prim.hh"
 #include "logprim.hh"
 #include "maxprim.hh"
@@ -653,6 +654,8 @@ void global::init()
     NIL  = symbol("nil");
     // Predefined nil tree
     nil = tree(NIL);
+
+    gInternalEnv = mkInternalEnv();
 
     PROCESS = symbol("process");
 
