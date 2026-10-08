@@ -19,7 +19,8 @@ def convert_files(dsp_file, out_dir, arch, faustflags):
     cpp_file = path.splitext(path.basename(dsp_file))[0] + ".cpp"
     arch_file = arch or "supercollider.cpp"
 
-    cmd = "faust -i -a %s -json %s -o %s %s" % (arch_file, dsp_file, cpp_file, faustflags)
+    cmd = ["faust", "-i", "-a", arch_file, "-json", dsp_file, "-o", cpp_file]
+    cmd.extend(faustflags.split())
 
     result = {
         "arch_file": arch_file,
@@ -31,7 +32,7 @@ def convert_files(dsp_file, out_dir, arch, faustflags):
 
     print("Converting faust file to .json and .cpp.\nCommand:\n%s.\nc++ file:%s\njson file:%s" % (cmd, cpp_file, result["json_file"]))
     try:
-        subprocess.run(cmd.split(), check = True, capture_output=False)
+        subprocess.run(cmd, check = True, capture_output=False)
         # shutil.move(result["cpp_file"], path.join(out_dir, result["cpp_file"]))
         # shutil.move(result["json_file"], path.join(out_dir, result["json_file"]))
     except subprocess.CalledProcessError:
@@ -213,16 +214,29 @@ def compile(out_dir, cpp_file, class_name, compile_supernova, headerpath, macos_
 # Help file
 ###########################################
 
+def input_controls(json_data):
+    def visit(ui):
+        for element in ui:
+            if element["type"] in ("hgroup", "vgroup", "tgroup"):
+                yield from visit(element["items"])
+            elif element["type"] in ("button", "checkbox", "hslider", "vslider", "nentry"):
+                yield element
+
+    names = {"in%s" % i for i in range(json_data["inputs"])}
+    for element in visit(json_data["ui"]):
+        label = sanitize_label(element.get("label", "")).replace(" ", "_") or "control"
+        name = label
+        suffix = 2
+        while name in names:
+            name = "%s_%s" % (label, suffix)
+            suffix += 1
+        names.add(name)
+        yield name, element
+
 # Iterate over all UI elements to get the parameter names, values and ranges
 def get_help_file_arguments(json_data):
     out_string = ""
-    # The zero index is needed because it's all in the first index, or is it? @FIXME
-    for ui_element in flatten_list_of_dicts(json_data["ui"])["items"]:
-
-        param_name = ""
-        if "label" in ui_element:
-            # Sanitize label
-            param_name = sanitize_label(ui_element["label"])
+    for param_name, ui_element in input_controls(json_data):
 
         param_min=""
         if "min" in ui_element:
@@ -326,7 +340,6 @@ def sanitize_label(label):
 # Iterate over all UI elements to get the parameter names, values and ranges
 def get_parameter_list(json_data, with_initialization):
     out_string = ""
-    # The zero index is needed because it's all in the first index, or is it? @FIXME
     counter=0
 
     inputs = ""
@@ -337,11 +350,7 @@ def get_parameter_list(json_data, with_initialization):
             else:
                 inputs = inputs + "in%s" % i
 
-    for ui_element in json_data["ui"][0]["items"]:
-
-        param_name=""
-        if "label" in ui_element:
-            param_name = sanitize_label(ui_element["label"])
+    for param_name, ui_element in input_controls(json_data):
 
         param_default = ""
         if "init" in ui_element:
@@ -452,16 +461,23 @@ checkInputs {
     else:
         input_check = ""
 
+    params_init = get_parameter_list(json_data, True)
+    params = get_parameter_list(json_data, False)
+    ar_args = ("|%s|" % params_init) if params_init else ""
+    kr_args = ar_args
+    ar_new = ("'audio', %s" % params) if params else "'audio'"
+    kr_new = ("'control', %s" % params) if params else "'control'"
+
     # The final class
     return """
 %s : %s {
 
-    *ar{|%s|
-      ^this.multiNew('audio', %s)
+    *ar{%s
+      ^this.multiNew(%s)
     }
 
-    *kr{|%s|
-      ^this.multiNew('control', %s)
+    *kr{%s
+      ^this.multiNew(%s)
     }
 
     name { ^"%s" }
@@ -473,12 +489,12 @@ checkInputs {
 """ % (
             class_name, parent_class,
             # *ar
-            get_parameter_list(json_data, True),
-            get_parameter_list(json_data, False),
+            ar_args,
+            ar_new,
 
             # *kr
-            get_parameter_list(json_data, True),
-            get_parameter_list(json_data, False),
+            kr_args,
+            kr_new,
 
             # FIXME: This is pretty ugly but it matches what the normalizeClassName function does in faust's supercollider.cpp
             # Ideally, this should be fixed in the supercollider.cpp

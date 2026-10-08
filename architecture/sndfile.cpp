@@ -53,6 +53,10 @@
 #include "faust/dsp/dsp-tools.h"
 #include "faust/misc.h"
 
+#ifdef SOUNDFILE
+#include "faust/gui/SoundUI.h"
+#endif
+
 /******************************************************************************
  *******************************************************************************
  
@@ -130,6 +134,11 @@ int main(int argc_aux, char* argv_aux[])
     // Recall state before handling commands
     FUI finterface;
     DSP.buildUserInterface(&finterface);
+
+#ifdef SOUNDFILE
+    SoundUI soundinterface;
+    DSP.buildUserInterface(&soundinterface);
+#endif
     
     CMDUI* interface = new CMDUI(argc, argv, true);
     DSP.buildUserInterface(interface);
@@ -173,6 +182,8 @@ int main(int argc_aux, char* argv_aux[])
             sf_perror(out_sf);
             exit(1);
         }
+        int clipping = SF_TRUE;
+        sf_command(out_sf, SFC_SET_CLIPPING, &clipping, sizeof(clipping));
         
         // Handling of the file containing sequence of time-stamped OSC messages
         ControlSequenceUI sequenceUI(OSCSequenceReader::read(cfilename, in_info.samplerate));
@@ -253,6 +264,8 @@ int main(int argc_aux, char* argv_aux[])
             sf_perror(out_sf);
             exit(1);
         }
+        int clipping = SF_TRUE;
+        sf_command(out_sf, SFC_SET_CLIPPING, &clipping, sizeof(clipping));
         
         // Init DSP with SR
         DSP.init(sample_rate);

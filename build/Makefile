@@ -28,7 +28,7 @@ system := $(shell echo $(system) | grep MINGW > /dev/null && echo MINGW || echo 
 # output directories
 FAUSTDIR ?= faustdir
 IOSDIR   := iosdir
-VERSION := 2.89.0
+VERSION := 2.90.4
 
 #===============================================================
 # current generator and backends
@@ -103,11 +103,11 @@ endif
 #===============================================================
 # main targets
 all: $(PROJ)
-	$(CMAKE) --build $(FAUSTDIR) $(BUILDOPT) 
+	$(CMAKE) --build $(FAUSTDIR) $(BUILDOPT) -j8
 
 full:
 	$(MAKE) cmake BACKENDS=all.cmake TARGETS=all.cmake 
-	$(CMAKE) --build $(FAUSTDIR) $(BUILDOPT) 
+	$(CMAKE) --build $(FAUSTDIR) $(BUILDOPT) -j8
 
 clean:
 	$(CMAKE) --build $(FAUSTDIR) --target clean

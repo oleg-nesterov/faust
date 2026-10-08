@@ -520,6 +520,9 @@ class NNXBaseInstVisitor : public TextInstVisitor {
         gFunctionSymbolTable["max_l"] = true;
         gFunctionSymbolTable["min_l"] = true;
 
+        gFunctionSymbolTable["pow_i"] = true;
+        gPolyMathLibTable["pow_i"] = "jnp.power";
+
         // Float version
         gFunctionSymbolTable["fabsf"]      = true;
         gFunctionSymbolTable["acosf"]      = true;
@@ -628,7 +631,7 @@ class NNXBaseInstVisitor : public TextInstVisitor {
         gPolyMathLibTable["cosf"]   = "jnp.cos";
         gPolyMathLibTable["expf"]   = "jnp.exp";
         gPolyMathLibTable["exp2f"]  = "jnp.exp2";
-        gPolyMathLibTable["exp10f"] = "jnp.exp10f";
+        gPolyMathLibTable["exp10f"] = "jnp.exp10";
         gPolyMathLibTable["floorf"] = "jnp.floor";
         // jnp.fmod follows C fmodf (sign of the dividend); jnp.mod is Python's
         // floored modulo and diverges for negative operands.
@@ -1155,6 +1158,14 @@ class NNXBaseInstVisitor : public TextInstVisitor {
             // turn "jnp." into "np."
             name = name.substr(1, name.size() - 1);
         }
+        // Neither NumPy nor JAX provides exp10. Use power in initialization
+        // and in the traced audio computation (including its gradients).
+        if (name == "np.exp10" || name == "jnp.exp10") {
+            *fOut << (fUseNumpy ? "np" : "jnp") << ".power(10.0, ";
+            generateFunCallArgs(inst->fArgs.begin(), inst->fArgs.end(), inst->fArgs.size());
+            *fOut << ")";
+            return;
+        }
         *fOut << name << "(";
         // Compile parameters
         generateFunCallArgs(inst->fArgs.begin(), inst->fArgs.end(), inst->fArgs.size());
@@ -1219,18 +1230,16 @@ class NNXBaseInstVisitor : public TextInstVisitor {
         *fOut << "for " << inst->getName() << " in ";
 
         if (inst->fReverse) {
-            // todo:
-            *fOut << "reverse(";
             Int32NumInst* lower_bound = dynamic_cast<Int32NumInst*>(inst->fLowerBound);
             faustassert(lower_bound);
-            *fOut << lower_bound->fNum << ":";
             Int32NumInst* upper_bound = dynamic_cast<Int32NumInst*>(inst->fUpperBound);
             if (upper_bound) {
-                *fOut << upper_bound->fNum;
+                *fOut << "range(" << upper_bound->fNum << ", " << (lower_bound->fNum - 1) << ", -1):";
             } else {
+                *fOut << "range(";
                 inst->fUpperBound->accept(this);
+                *fOut << ", " << (lower_bound->fNum - 1) << ", -1):";
             }
-            *fOut << ")";
         } else {
             Int32NumInst* lower_bound = dynamic_cast<Int32NumInst*>(inst->fLowerBound);
             faustassert(lower_bound);

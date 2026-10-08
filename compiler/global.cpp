@@ -38,6 +38,7 @@
 #include "floorprim.hh"
 #include "fmodprim.hh"
 #include "global.hh"
+#include "interval_def.hh"
 #include "instructions.hh"
 #include "internalprim.hh"
 #include "log10prim.hh"
@@ -560,6 +561,7 @@ void global::reset()
     gCausality           = false;
 
     gFoldingFlag = false;
+    gOccurrences = nullptr;
     gDevSuffix   = nullptr;
 
     gSTEP = 1;  // unique compilation step number
@@ -648,6 +650,7 @@ void global::init()
     gSymbolicBoxProperty   = new property<Tree>();
     gEvalMemo              = new property2<Tree>();
     gPMMemo                = new property2<Tree>();
+    gApplyMemo             = new property2<Tree>();
     gSimplifiedBoxProperty = new property<Tree>();
     gSymListProp           = new property<Tree>();
 
@@ -706,6 +709,7 @@ void global::init()
     gInjectFile = "";     // instead of a compiled dsp file
 
     // Create type declaration for external 'soundfile' type
+    // (fields order has to match the Soundfile::kBuffers... enum in dsp_aux.hh)
     vector<NamedTyped*> sf_type_fields;
     sf_type_fields.push_back(IB::genNamedTyped("fBuffers", IB::genBasicTyped(Typed::kVoid_ptr)));
     sf_type_fields.push_back(IB::genNamedTyped("fLength", IB::genBasicTyped(Typed::kInt32_ptr)));
@@ -2002,7 +2006,8 @@ bool global::processCmdline(int argc, const char* argv[])
         if (!(gOutputLang == "c" || gOutputLang == "cpp" || gOutputLang == "llvm" ||
               gOutputLang == "fir")) {
             throw faustexception(
-                "ERROR : -fun can only be used with 'c', 'cpp', 'llvm' or 'fir' backends\n");
+                "ERROR : -fun can only be used with 'c', 'cpp', 'llvm' or 'fir' "
+                "backends\n");
         }
     }
 
@@ -2066,6 +2071,9 @@ bool global::processCmdline(int argc, const char* argv[])
     if (gComputeMix && gOutputLang == "cmajor") {
         throw faustexception("ERROR : -cm cannot be used with the 'cmajor' backend\n");
     }
+
+    // the intervals describe the program : float-carried bounds at its precision
+    itv::programPrecision() = gFloatSize;
 
     if (gFloatSize == 4 && gOutputLang != "cpp" && gOutputLang != "ocpp" && gOutputLang != "c" &&
         gOutputLang != "fir") {

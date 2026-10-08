@@ -76,6 +76,12 @@ class PowPrim : public xtendedCodegen {
             } else {
                 return tree(pow(double(n), double(m)));
             }
+        } else if (isNum(args[0], n)) {
+            double base = double(n);
+            if ((base == 10.) && gGlobal->gHasExp10) {
+                // pow(10, x) ==> exp10(x)
+                return tree(::symbol("exp10"), args[1]);
+            }
         } else if (isNum(args[1], m)) {
             double exponent = double(m);
             if (exponent == 0.0) {
@@ -84,9 +90,6 @@ class PowPrim : public xtendedCodegen {
             } else if (exponent == 1.0) {
                 // pow(x, 1) ==> x
                 return args[0];
-            } else if ((exponent == 10.) && gGlobal->gHasExp10) {
-                // pow(x, 10) ==> exp10(x)
-                return tree(::symbol("exp10"), args[0]);
             } else if (exponent == 0.5) {
                 // pow(x, 0.5) ==> sqrt(x)
                 return tree(::symbol("sqrt"), args[0]);
@@ -134,6 +137,14 @@ class PowPrim : public xtendedCodegen {
         faustassert(args.size() == arity());
         faustassert(types.size() == arity());
 
+        // JAX's float-to-int conversion saturates on overflow. Use its native
+        // integer power for nonnegative integer exponents to preserve int32 wrap.
+        if (gGlobal->isPythonBackend() && result->nature() == kInt &&
+            types[1]->getInterval().lo() >= 0) {
+            std::vector<Typed::VarType> atypes = {Typed::kInt32, Typed::kInt32};
+            return container->pushFunction("pow_i", Typed::kInt32, atypes, args);
+        }
+
         ValuesIt it = args.begin();
         it++;
         int pow_arg = 0;
@@ -150,15 +161,22 @@ class PowPrim : public xtendedCodegen {
                                            std::to_string(pow_arg) +
                                            ((rtype == Typed::kInt32) ? "_i" : "_f");
 
+            // The argument's name carries its type. Variable types are kept in
+            // one global table keyed by NAME, so an int and a float helper that
+            // both called their argument "value" shared one entry: whichever
+            // was declared last decided, and the C backend then rendered the
+            // float helper's multiply as the int32 faust_wrap_mul(), truncating
+            // every float x*x to an integer square.
+            std::string arg_name = (t0 == Typed::kInt32) ? "value_i" : (t0 == Typed::kInt64) ? "value_l" : "value_f";
             Names named_args;
-            named_args.push_back(IB::genNamedTyped("value", IB::genBasicTyped(t0)));
+            named_args.push_back(IB::genNamedTyped(arg_name, IB::genBasicTyped(t0)));
 
             if (pow_arg == 0) {
                 block->pushBackInst(IB::genRetInst(IB::genTypedNum(t0, 1.0)));
             } else {
-                ValueInst* res = IB::genLoadFunArgsVar("value");
+                ValueInst* res = IB::genLoadFunArgsVar(arg_name);
                 for (int i = 0; i < pow_arg - 1; i++) {
-                    res = IB::genMul(res, IB::genLoadFunArgsVar("value"));
+                    res = IB::genMul(res, IB::genLoadFunArgsVar(arg_name));
                 }
                 block->pushBackInst(IB::genRetInst(res));
             }
