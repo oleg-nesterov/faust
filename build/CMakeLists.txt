@@ -3,7 +3,7 @@ project (faust)
 
 #######################################
 # versions management
-set (VERSION 2.90.4)
+set (VERSION 2.90.5)
 macro (get_major_minor_patch version)
     string( REGEX REPLACE "([0-9]*)\\.([0-9]*)\\.([0-9]*)" "\\1"  VERSION_MAJOR ${version} )
     string( REGEX REPLACE "([0-9]*)\\.([0-9]*)\\.([0-9]*)" "\\2"  VERSION_MINOR ${version} )
@@ -222,6 +222,9 @@ endif()
 # macro is mapped onto faust's LIBFAUST_API so the tlib symbols that belong to
 # the public libfaust API (isNil, tree2str, CTree...) keep being exported.
 set (FAUST_DEFINITIONS ${FAUST_DEFINITIONS} -DTLIB_EXPORT_HEADER=<faust/export.h> -DTLIB_API=LIBFAUST_API)
+
+# Export the public signal API when building libfaust with hidden visibility.
+set (FAUST_DEFINITIONS ${FAUST_DEFINITIONS} -DSIGS_EXPORT_HEADER=<faust/export.h> -DSIGS_API=LIBFAUST_API)
 
 if (MSVC)
 else()
